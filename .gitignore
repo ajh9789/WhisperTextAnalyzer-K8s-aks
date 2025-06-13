@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# PyCharm
+.idea/
+
+# Virtualenv
+venv/
+ENV/
+env/
+.venv/
+#wsl용
+ansible-env/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# SQLite DB (optional, 이름 변경 가능)
+*.sqlite
+*.sqlite3
+*.db
+
+# Audio files (recordings, temp files)
+*.wav
+*.mp3
+*.flac
+
+# Model files (if any large model downloads)
+*.pt
+*.pth
+*.onnx
+
+# Misc
+*.bak
+*.tmp
+STUDYME/
+
+
+# VSCode 
+.vscode/

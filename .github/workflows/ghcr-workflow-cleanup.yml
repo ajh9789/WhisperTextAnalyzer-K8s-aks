@@ -1,0 +1,47 @@
+name: 🧹 Delete Old Workflow Runs  # GitHub Actions 실행 기록 자동 정리 워크플로
+
+on:
+  workflow_dispatch:  # 수동 실행 허용 (Actions 탭에서 직접 실행 가능)
+  schedule:
+    - cron: '0 4 * * 0'  # 주 1회 일요일 오전 4시(UTC)에 자동 실행하려면 이 주석을 해제하세요
+  # 0:분    → 0분 (정각)
+  # 4:시    → 4시
+  # *:일    → 매일
+  # *:월    → 매월
+  # 0:요일 → 일요일 (0=일, 6=토 기준)
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest  # Ubuntu 최신 환경에서 실행
+
+    steps:
+      - name: 📥 Checkout repository  # 먼저 GitHub 리포지토리 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 📦 Install GitHub CLI  # GitHub CLI(gh) 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install gh -y
+
+      - name: 🔑 Authenticate with PAT  # Personal Access Token으로 gh CLI 인증
+        run: |
+          echo "${{ secrets.GHCR_PAT }}" | gh auth login --with-token
+
+      - name: 🧹 Delete old workflow runs (keep latest 30)
+        run: | # 최신 30개 제외하고 나머지를 슬라이스해서 삭제
+          echo "🧹 Keeping latest 30 runs of 'docker-multi-build.yml' and deleting the rest..."
+          
+          run_ids=$(gh run list \
+            --workflow docker-multi-build.yml \
+            --limit 100 \
+            --json databaseId \
+            -q '.[].databaseId')
+          
+          index=0 
+          for run_id in $run_ids; do
+            if [ $index -ge 30 ]; then
+              echo "🗑️ Deleting run: $run_id"
+              yes | gh run delete $run_id
+            fi
+            index=$((index+1))
+          done

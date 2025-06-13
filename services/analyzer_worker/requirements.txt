@@ -1,0 +1,7 @@
+numpy==1.26.4
+torch==2.2.2+cpu
+celery==5.3.6
+redis==5.0.4
+transformers==4.40.1
+huggingface_hub==0.23.0
+-f https://download.pytorch.org/whl/torch_stable.html

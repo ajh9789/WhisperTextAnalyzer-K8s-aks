@@ -1,0 +1,24 @@
+- name: SSH 허용 (IPv4 + IPv6)
+  shell: ufw allow 22/tcp comment 'Allow SSH'
+
+- name: Service CIDR 허용 (CoreDNS용)
+  ufw:
+    rule: allow
+    from_ip: 10.96.0.0/12
+    comment: Allow CoreDNS → API access
+
+- name: Pod CIDR 허용 (Flannel용)
+  ufw:
+    rule: allow
+    from_ip: 10.244.0.0/16
+    comment: Allow Pod-to-Pod via Flannel
+
+- name: NodePort 포트 허용 (IPv4 + IPv6)
+  shell: ufw allow 30000:32767/tcp comment 'Allow NodePort range'
+
+- name: 443 포트 허용 (Ingress HTTPS, IPv4 + IPv6)
+  shell: ufw allow 443/tcp comment 'Allow HTTPS ingress'
+
+- name: UFW 상태 확인
+  command: ufw status verbose
+  changed_when: false

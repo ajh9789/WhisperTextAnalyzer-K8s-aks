@@ -1,0 +1,51 @@
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    restart: always
+  stt_worker:
+    build:
+      context: services/stt_worker
+    command: celery -A stt_worker:celery worker -Q stt_queue --loglevel=info --concurrency=1 --pool=solo
+    environment:
+      - REDIS_HOST=redis
+      - DOCKER=1
+    depends_on:
+      - redis
+    restart: always
+
+  analyzer_worker:
+    build:
+      context: services/analyzer_worker
+    command: celery -A analyzer_worker:celery worker -Q analyzer_queue --loglevel=info --concurrency=1 --pool=solo
+    environment:
+      - REDIS_HOST=redis
+      - DOCKER=1
+    depends_on:
+      - redis
+    restart: always
+
+  fastapi_service:
+    build:
+      context: services/fastapi_service
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - DOCKER=1
+    depends_on:
+      - redis
+    restart: always
+    command: uvicorn fastapi_service:app --host 0.0.0.0 --port 8000
+# 리눅스 배포 시 실행 명령어 예시
+# docker-compose up --scale stt_worker=2 -d
+
+# ==========================
+#  설명
+# - 배포 시 컨테이너 개수 조절 (--scale)
+# - 윈도우용 --concurrency=1 --pool=solo
+# - wsl2 기반 우분투 조차 --poll=sole 안하면 버그 발생
+
+#  recorder_service는 더 이상 로컬 테스트에 필요하지않아서 삭제
+#  listener_service는 쿠버네티스 연습하면서 삭제

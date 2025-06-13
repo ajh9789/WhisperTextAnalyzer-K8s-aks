@@ -1,0 +1,10 @@
+numpy==1.26.4
+scipy==1.13.0
+celery==5.3.6
+redis==5.0.4
+fastapi==0.115.2
+
+# 더 이상 사용되지 않음 (whisper.cpp 전환으로 제거됨)
+# torch==2.2.2+cpu
+# openai-whisper==20240930
+# -f https://download.pytorch.org/whl/torch_stable.html

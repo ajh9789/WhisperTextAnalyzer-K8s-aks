@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deploy
+spec:
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+        - name: fastapi-service
+          image: "{{ .Values.fastapi.image.repository }}:{{ .Values.fastapi.image.tag }}"
+          imagePullPolicy: {{ .Values.fastapi.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.fastapi.containerPort }}
+          command: {{ toJson .Values.fastapi.command }}
+          args: {{ toJson .Values.fastapi.args }}
+          envFrom:
+            {{- toYaml .Values.fastapi.envFrom | nindent 12 }}
+          env:
+            {{- toYaml .Values.fastapi.env | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.fastapi.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.fastapi.readinessProbe | nindent 12 }}

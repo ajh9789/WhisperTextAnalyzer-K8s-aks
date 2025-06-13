@@ -1,0 +1,33 @@
+- name: UFW 방화벽 설정 (모든 노드)
+  hosts: all
+  become: true
+  roles:
+    - firewall
+
+- name: 마스터 노드에 쿠버네티스 설치
+  hosts: k8s
+  become: true
+  roles:  # 쿠배디움, containerd, 플래넬, taint 제거 등 포함
+    - k8s_init  #{ role: helm_deploy, tags: ['helm'] } 이런식으로 태그도가능
+
+- name: Whisper Helm Chart 배포  # 이 play의 이름 (로그에 출력됨)
+  hosts: k8s                     # 대상 호스트 그룹 이름 (inventory의 [k8s] 참조)
+  become: true                   # 일반 사용자 → root 권한 상승 (sudo 수행 허용)
+  become_user: root              # 어떤 사용자 권한으로 바꿀지 (보통 root)
+  become_method: sudo            # 권한 상승 방법 (sudo, su 등 중 선택. 기본은 sudo)
+  gather_facts: false            # 서버 시스템 정보 수집 비활성화 (빠른 실행을 원할 때 꺼둠)
+  environment:  # 반복해서 안적어두됨... 몰라서 다적음
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  tasks: #task 속의 task 방식으로 role 실행
+    - name: kubeadm init 완료 여부 확인 (admin.conf 존재 확인)
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf_check
+
+    - name: Helm Chart 배포
+      when: # k8s init 완료 조건 (기본값 true) 쿠버 설치 도중에 실행되면 완되니까 
+        - install_k8s is not defined or install_k8s | bool == true
+        - admin_conf_check.stat.exists
+
+      include_role: # 이 play에서 실행할 역할 (roles/helm_deploy/tasks/main.yml 수행됨)  가능
+        name: helm_deploy # { role: helm_deploy, when: admin_conf_check.stat.exists } 이런식으로도 설정

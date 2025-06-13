@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-svc
+  labels:
+    app: fastapi-svc
+spec:
+  type: {{ .Values.fastapi.service.type }}
+  selector:
+    app: fastapi
+  ports:
+    - name: {{ .Values.fastapi.service.portName | default "http" }}   # ← name 필드 추가
+      port: {{ .Values.fastapi.service.port }}
+      targetPort: {{ .Values.fastapi.service.targetPort }}

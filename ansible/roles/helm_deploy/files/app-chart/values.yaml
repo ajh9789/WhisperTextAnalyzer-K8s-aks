@@ -1,0 +1,266 @@
+replicaCount: 1
+
+image:
+  repository: nginx
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: [ ]
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: { }
+  name: ""
+
+podAnnotations: { }
+podLabels: { }
+
+podSecurityContext: { }
+
+
+securityContext: { }
+
+service:
+  type: ClusterIP
+  port: 80
+
+  tls: [ ]
+
+resources: { }
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+
+volumes: [ ]
+
+volumeMounts: [ ]
+
+nodeSelector: { }
+
+tolerations: [ ]
+
+affinity: { }
+
+redis:
+  image:
+    repository: redis
+    tag: 7.2
+    pullPolicy: IfNotPresent
+  containerPort: 6379
+  service:
+    type: ClusterIP
+    port: 6379
+    targetPort: 6379
+
+fastapi:
+  image:
+    repository: ghcr.io/ajh9789/fastapi_service
+    tag: latest
+    pullPolicy: Always
+
+  containerPort: 8000
+
+  command: [ "uvicorn" ]
+  args: [ "fastapi_service:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers" ]
+
+  env:
+    - name: REDIS_HOST
+      value: redis
+
+  envFrom:
+    - configMapRef:
+        name: whisper-config
+    - secretRef:
+        name: whisper-secret
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /status
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 2
+
+  service:
+    portName: http
+    port: 8000
+    targetPort: 8000
+
+analyzer:
+  replicas: 1
+  image:
+    repository: ghcr.io/ajh9789/analyzer_worker
+    tag: latest
+    pullPolicy: Always
+  command: [ "celery" ]
+  args: [ "-A", "analyzer_worker", "worker", "-Q", "analyzer_queue", "--loglevel=info"]
+  envFrom:
+    - configMapRef:
+        name: whisper-config
+    - secretRef:
+        name: whisper-secret
+  env:
+    - name: REDIS_HOST
+      value: redis
+    - name: DOCKER
+      value: "1"
+
+
+sttWorker:
+  replicas: 1
+  image:
+    repository: ghcr.io/ajh9789/stt_worker
+    tag: latest
+    pullPolicy: Always
+  command: [ "celery" ]
+  args: [ "-A", "stt_worker", "worker", "-Q", "stt_queue", "--loglevel=info" ]
+  env:
+    - name: REDIS_HOST
+      value: redis
+    - name: DOCKER
+      value: "1"
+    - name: MODEL_PATH
+      value: /app/models
+    - name: MODEL_SIZE
+      value: small  # 또는 tiny, small, medium
+  envFrom:
+    - configMapRef:
+        name: whisper-config
+    - secretRef:
+        name: whisper-secret
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2072Mi
+
+sttWorkerHPA:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+
+whisperConfig:
+  REDIS_HOST: redis
+  MODEL_PATH: /app/models
+  MODEL_SIZE: small
+  DOCKER: "1"
+
+persistentVolume:
+  name: pv-models
+  storage: 2Gi
+  path: /mnt/models
+  storageClassName: ""
+
+persistentVolumeClaim:
+  name: pvc-models
+  storage: 2Gi
+  storageClassName: ""
+
+ingress:
+  enabled: true
+  name: whisper-ingress
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/enable-websocket: "true"    
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"              # 
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    cert-manager.io/cluster-issuer: "cert-manager-webhook-duckdns-production"  # Let's Encrypt 인증서 사용
+  tls:
+    - hosts:
+        - stt-k8s.duckdns.org # 직전에 꼭 바꿀것
+      secretName: letsencrypt-cert # TLS 인증서 저장
+  rules:  
+    - host: stt-k8s.duckdns.org #직전에 바꿀것
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-svc
+                port:
+                  number: 8000
+          - path: /status
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-svc
+                port:
+                  number: 8000
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-svc
+                port:
+                  number: 8000
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 3000
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-kube-prometheus-prometheus
+                port:
+                  number: 9090
+          - path: /alertmanager
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-kube-prometheus-alertmanager
+                port:
+                  number: 9093
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-svc
+                port:
+                  number: 8000
+
+certManager:
+  certName: letsencrypt-cert
+  issuerName: cert-manager-webhook-duckdns-production
+  namespace: default       
+  domain: stt-k8s.duckdns.org
+  secretName: letsencrypt-cert
+  duration: 2160h
+  renewBefore: 720h

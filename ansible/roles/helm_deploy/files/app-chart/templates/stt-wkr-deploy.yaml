@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stt-wkr-deploy
+spec:
+  replicas: {{ .Values.sttWorker.replicas }}
+  selector:
+    matchLabels:
+      app: stt-wkr
+  template:
+    metadata:
+      labels:
+        app: stt-wkr
+    spec:
+      containers:
+        - name: stt-worker
+          image: "{{ .Values.sttWorker.image.repository }}:{{ .Values.sttWorker.image.tag }}"
+          imagePullPolicy: {{ .Values.sttWorker.image.pullPolicy }}
+          command: {{ toJson .Values.sttWorker.command }}
+          args: {{ toJson .Values.sttWorker.args }}
+          envFrom:
+            {{- toYaml .Values.sttWorker.envFrom | nindent 12 }}
+          env:
+            {{- toYaml .Values.sttWorker.env | nindent 12 }}
+          resources:
+            {{- toYaml .Values.sttWorker.resources | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.sttWorker.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.sttWorker.volumes | nindent 8 }}

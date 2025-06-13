@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anlz-wrk-deploy
+spec:
+  replicas: {{ .Values.analyzer.replicas }}
+  selector:
+    matchLabels:
+      app: anlz-wrk
+  template:
+    metadata:
+      labels:
+        app: anlz-wrk
+    spec:
+      containers:
+        - name: analyzer-worker
+          image: "{{ .Values.analyzer.image.repository }}:{{ .Values.analyzer.image.tag }}"
+          imagePullPolicy: {{ .Values.analyzer.image.pullPolicy }}
+          command: {{ toJson .Values.analyzer.command }}
+          args: {{ toJson .Values.analyzer.args }}
+          envFrom:
+            {{- toYaml .Values.analyzer.envFrom | nindent 12 }}
+          env:
+            {{- toYaml .Values.analyzer.env | nindent 12 }}

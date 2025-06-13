@@ -1,0 +1,152 @@
+# 0. cert-manager 설치
+- name: cert-manager Helm repo 추가
+  command: helm repo add jetstack https://charts.jetstack.io
+  args:
+    creates: /etc/kubernetes/.cert-manager-helm-repo-added
+  register: cert_repo_add
+  become: true
+
+# 1. ingress-nginx, prometheus, grafana repo 추가
+- name: Helm repo들 추가
+  shell: |
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo add grafana https://grafana.github.io/helm-charts
+  args:
+    creates: /etc/kubernetes/.all-helm-repos-added
+  become: true
+
+# 2. repo 업데이트
+- name: Helm repo 업데이트 (모든 repo 반영)
+  command: helm repo update
+  become: true
+
+# 3. cert-manager 설치 (CRD 포함) # 내부 dns 이슈 \, \\,으로써야 파서됨
+- name: cert-manager 설치
+  command: >
+    helm upgrade --install cert-manager jetstack/cert-manager \
+      --namespace cert-manager \
+      --create-namespace \
+      --set installCRDs=true \
+      --set extraArgs[0]=--dns01-recursive-nameservers=8.8.8.8:53\\,1.1.1.1:53 \
+      --set extraArgs[1]=--dns01-recursive-nameservers-only \
+      --wait --timeout 120s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+- name: cert-manager Ready 상태 확인
+  shell: |
+    kubectl rollout status deployment cert-manager -n cert-manager --timeout=120s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+# 3.5 DuckDNS webhook GitHub에서 직접 clone
+- name: DuckDNS cert-manager webhook chart 클론
+  git:
+    repo: https://github.com/ebrianne/cert-manager-webhook-duckdns.git
+    dest: /tmp/cert-manager-webhook-duckdns
+    force: yes
+  become: true
+
+# 3.6 cert-manager webhook - DuckDNS Helm 설치
+- name: cert-manager webhook - DuckDNS 설치 # 토큰과 이메일
+  command: >
+    helm upgrade --install cert-manager-webhook-duckdns
+    ./deploy/cert-manager-webhook-duckdns
+    -n cert-manager
+    --create-namespace
+    --set duckdns.token="#######토큰자리########"
+    --set clusterIssuer.production.create=true
+    --set clusterIssuer.email=####이메일주소자리######
+    --wait --timeout 120s
+  args:
+    chdir: /tmp/cert-manager-webhook-duckdns
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+# 3.7 webhook Ready 상태 확인
+- name: DuckDNS webhook pod Ready 상태 확인
+  shell: kubectl rollout status deployment cert-manager-webhook-duckdns -n cert-manager --timeout=120s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+# 4. ingress-nginx 설치
+- name: ingress-nginx 설치
+  command: >
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
+    --namespace ingress-nginx
+    --create-namespace
+    --set controller.service.type=NodePort
+    --set controller.service.nodePorts.http=80
+    --set controller.service.nodePorts.https=443
+    --set controller.publishService.enabled=true
+    --wait --timeout 120s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+- name: ingress-nginx controller Ready 확인
+  shell: >
+    kubectl rollout status deployment ingress-nginx-controller -n ingress-nginx --timeout=120s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+# 5. app-chart 배포
+- name: Helm Chart 디렉토리 복사
+  copy:
+    src: roles/helm_deploy/files/app-chart/
+    dest: /tmp/app-chart
+    force: true
+    mode: '0755'
+  become: true
+
+- name: Helm Chart 배포
+  command: helm upgrade --install myrelease ./app-chart -n default
+  args:
+    chdir: /tmp
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+# 6. kube-prometheus-stack + loki 설치
+- name: Loki-stack 설치 (Grafana 로그 연동용)
+  command: >
+    helm upgrade --install loki grafana/loki-stack
+    -n default
+    --create-namespace
+    -f /tmp/app-chart/loki-values.yaml
+    --wait --timeout 240s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+- name: kube-prometheus-stack 설치 (grafana 포함)
+  command: >
+    helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
+    -n default
+    --create-namespace
+    -f /tmp/app-chart/grafana-values.yaml
+    --wait --timeout 240s
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+- name: 기존 PVC 제거 
+  shell: |
+    kubectl delete pvc pvc-models -n default --ignore-not-found
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+
+- name: Helm Chart 강제 재설치 (Force Upgrade)
+  command: helm upgrade --install myrelease ./app-chart -n default --wait --timeout 300s --force
+  args:
+    chdir: /tmp
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
