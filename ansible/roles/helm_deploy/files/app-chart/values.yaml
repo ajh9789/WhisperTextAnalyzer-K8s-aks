@@ -187,23 +187,16 @@ persistentVolumeClaim:
 ingress:
   enabled: true
   name: whisper-ingress
-  className: nginx
+  className: azure/application-gateway
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/enable-websocket: "true"    
-    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"              # 
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    cert-manager.io/cluster-issuer: "cert-manager-webhook-duckdns-production"  # Let's Encrypt 인증서 사용
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
   tls:
     - hosts:
-        - stt-k8s.duckdns.org # 직전에 꼭 바꿀것
-      secretName: letsencrypt-cert # TLS 인증서 저장
+        - your-domain.com # 실제 도메인
+      secretName: letsencrypt-tls-secret
   rules:  
-    - host: stt-k8s.duckdns.org #직전에 바꿀것
+    - host: your-domain.com # 실제 도메인
       http:
         paths:
           - path: /ws
@@ -256,11 +249,19 @@ ingress:
                 port:
                   number: 8000
 
+
 certManager:
   certName: letsencrypt-cert
-  issuerName: cert-manager-webhook-duckdns-production
+  issuerName: letsencrypt-prod
   namespace: default       
-  domain: stt-k8s.duckdns.org
-  secretName: letsencrypt-cert
+  domain: your-domain.com # 실제 도메인
+  secretName: letsencrypt-tls-secret
   duration: 2160h
   renewBefore: 720h
+
+issuer:
+  enabled: true
+  name: letsencrypt-prod
+  acmeServer: https://acme-v02.api.letsencrypt.org/directory
+  email: your-email@example.com # 실제 이메일
+  privateKeySecretName: letsencrypt-prod-private-key
