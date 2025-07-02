@@ -59,6 +59,7 @@ tolerations: [ ]
 affinity: { }
 
 redis:
+  replicas: 1 # Added
   image:
     repository: redis
     tag: 7.2
@@ -160,6 +161,13 @@ sttWorker:
     limits:
       cpu: 1000m
       memory: 2072Mi
+  volumeMounts: # Added
+    - name: models-volume
+      mountPath: /app/models
+  volumes: # Added
+    - name: models-volume
+      persistentVolumeClaim:
+        claimName: pvc-models
 
 sttWorkerHPA:
   enabled: true
@@ -187,10 +195,10 @@ persistentVolumeClaim:
 ingress:
   enabled: true
   name: whisper-ingress
-  className: nginx
+  className: nginx # Changed from azure/application-gateway
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true" # Changed from appgw.ingress.kubernetes.io/ssl-redirect
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true" # Added
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   tls:
     - hosts:
@@ -266,3 +274,69 @@ issuer:
   acmeServer: https://acme-v02.api.letsencrypt.org/directory
   email: your-email@example.com # 실제 이메일
   privateKeySecretName: letsencrypt-prod-private-key
+
+kube-prometheus-stack: # Added
+  enabled: true
+  grafana:
+    enabled: true
+    adminUser: admin
+    adminPassword: admin
+    defaultDatasourceEnabled: false
+    sidecar:
+      datasources:
+        enabled: false
+      dashboards:
+        enabled: true
+        searchNamespace: ALL
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            url: http://prometheus-operated.default.svc.cluster.local:9090
+            isDefault: true
+          - name: Loki
+            type: loki
+            access: proxy
+            url: http://loki.default.svc.cluster.local:3100
+            isDefault: false
+  prometheus:
+    enabled: true
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelector: {}
+      additionalServiceMonitors:
+        - name: fastapi-monitor
+          selector:
+            matchLabels:
+              app: fastapi
+          namespaceSelector:
+            matchNames:
+              - default
+          endpoints:
+            - port: http
+              path: /metrics
+
+loki: # Added
+  enabled: true
+  grafana:
+    enabled: false
+  prometheus:
+    enabled: false
+  promtail:
+    enabled: true
+    config:
+      snippets:
+        pipelineStages:
+          - cri: {}
+        extraScrapeConfigs: |
+          - job_name: fastapi-logs
+            static_configs:
+              - targets:
+                  - localhost
+                labels:
+                  job: fastapi
+                  __path__: /var/log/containers/*fastapi*.log
+
